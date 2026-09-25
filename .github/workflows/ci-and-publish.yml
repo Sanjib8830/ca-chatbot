@@ -154,6 +154,7 @@ jobs:
           deploy_path="$1"
           image="$2"
           app_port="$3"
+          trap 'rm -f "$deploy_path/.ghcr-credentials"; docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
 
           chmod 600 "$deploy_path/.env" "$deploy_path/.ghcr-credentials"
           ghcr_username="$(sed -n '1p' "$deploy_path/.ghcr-credentials")"
