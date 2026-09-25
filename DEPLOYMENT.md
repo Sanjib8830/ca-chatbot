@@ -1,81 +1,37 @@
 # Deployment
 
-## Render Hosting
+## GitHub Pages
 
-This repository is configured to host the application on Render as a public
-web service. The `render.yaml` Blueprint uses the image published to GitHub
-Container Registry, and the service receives an HTTPS URL from Render.
+GitHub Actions builds and deploys the React frontend to GitHub Pages whenever
+code is pushed to `main`. The workflow is defined in
+[`.github/workflows/ci-and-publish.yml`](.github/workflows/ci-and-publish.yml).
 
-### Create The Render Service
+### One-Time GitHub Setup
 
-1. In Render, add a container registry credential named
-   `github-container-registry`. Select GitHub Container Registry, use the
-   GitHub username `Sanjib8830`, and provide a token with `read:packages`
-   permission. This is required while the GHCR package is private.
-2. In the Render Dashboard, choose **New > Blueprint**, connect the
-   `Sanjib8830/ca-chatbot` repository, and apply the root `render.yaml` file.
-3. When Render prompts for `GOOGLE_API_KEY`, enter the Google AI Studio key.
-   The key is stored in Render as a runtime secret and is not committed to
-   this repository.
-4. Complete the first deploy. Render will show the public address in the
-   service dashboard, normally in the form
-   `https://ca-chatbot.onrender.com` (the exact hostname may vary).
+1. Open the repository on GitHub and go to **Settings > Pages**.
+2. Under **Build and deployment**, set **Source** to **GitHub Actions**.
+3. Push to `main`, or run the workflow from the **Actions** tab.
 
-### Enable Deployments From GitHub Actions
+After the workflow succeeds, the frontend URL will be:
 
-The workflow verifies the application, publishes `latest` and immutable
-SHA-tagged images to GHCR, and can then tell Render to deploy the exact SHA
-image that passed CI.
-
-Create a Render deploy hook from the service's **Settings** page and add it to
-the GitHub repository under **Settings > Secrets and variables > Actions**:
-
-- `RENDER_DEPLOY_HOOK_URL`: the secret Render deploy hook URL.
-
-Then add the repository variable `DEPLOY_RENDER_ENABLED` with the value
-`true`. Every successful push to `main` will publish the image and trigger the
-Render deployment. The workflow's manual **Deploy** input can be enabled for
-an individual run instead of setting the variable.
-
-The Render service must keep the image URL in `render.yaml` aligned with the
-published package. Render pulls the private image using the registry
-credential configured in the workspace.
-
-## GitHub Actions
-
-The workflow in `.github/workflows/ci-and-publish.yml` runs on pull requests to
-`main` and pushes to `main`.
-
-- Every pull request runs typecheck, lint, tests, and a production build.
-- A push to `main` publishes a container image to GitHub Container Registry:
-  `ghcr.io/<your-github-owner>/ca-chatbot:latest`.
-- A successful `main` push can trigger Render through
-  `RENDER_DEPLOY_HOOK_URL` after publishing the immutable SHA-tagged image.
-- `GOOGLE_API_KEY` is not needed by GitHub Actions. Configure it in the Render
-  service's environment settings so it is available only at runtime.
-- The image is built for `linux/amd64`, which is required by Render image-backed
-  services.
-
-## Run The Published Image
-
-Provide the Google key only at container runtime:
-
-```bash
-docker run --rm -p 3001:3001 \
-  -e GOOGLE_API_KEY="your-google-ai-studio-key" \
-  ghcr.io/<your-github-owner>/ca-chatbot:latest
+```text
+https://sanjib8830.github.io/ca-chatbot/
 ```
 
-Open `http://localhost:3001/`.
+The workflow builds with the `/ca-chatbot/` base path so JavaScript and CSS
+assets load correctly from the repository URL.
 
-The container serves both the compiled React application and the `/api` backend
-from one origin. It intentionally does not contain `backend/.env` or the API key.
+## Important: Frontend Only
 
-## Hosting Provider
+GitHub Pages hosts static frontend files. It does not run the Node.js backend,
+so the deployed page cannot send chatbot requests by itself. The frontend
+currently calls `/api`, which works with the local Vite proxy and the combined
+Docker application, but GitHub Pages has no `/api` server.
 
-Render provides the public hosting URL and HTTPS termination. The application
-container listens on port `3001`, and Render routes public traffic to it. A
-custom domain can be added later from the Render service settings.
+To make the online chatbot functional, deploy the backend separately to a
+server that provides a public HTTPS API and configure the frontend API base URL
+to point to it. The Google API key belongs only on that backend server, never in
+the frontend or GitHub Pages.
 
 ## Local Development
 
