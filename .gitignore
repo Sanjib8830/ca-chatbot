@@ -4,6 +4,7 @@ build/
 coverage/
 *.log
 *.tsbuildinfo
+.playwright-mcp/
 .env
 .env.*
 !.env.example
