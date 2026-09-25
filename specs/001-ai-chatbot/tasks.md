@@ -54,6 +54,8 @@ description: "Actionable task list for the AI chatbot conversation feature"
 
 **Checkpoint**: Workspace packages, domain types, server-only model configuration, typed API plumbing, and shared error handling are ready for story work.
 
+---
+
 ## Phase 3: User Story 1 - Ask a Question (Priority: P1) MVP
 
 **Goal**: Let a user submit a valid text question, see it exactly once with pending feedback, and receive an assistant response.
@@ -77,6 +79,8 @@ description: "Actionable task list for the AI chatbot conversation feature"
 
 **Checkpoint**: User Story 1 is independently functional and testable through the P1 acceptance scenarios and the first quickstart validation scenario.
 
+---
+
 ## Phase 4: User Story 2 - Continue a Conversation (Priority: P2)
 
 **Goal**: Preserve ordered conversation context for follow-up questions and allow the user to start a clean conversation.
@@ -96,6 +100,8 @@ description: "Actionable task list for the AI chatbot conversation feature"
 - [X] T026 [US2] Extend `frontend/src/pages/ChatPage.tsx` to keep the active conversation history, submit follow-ups with the existing conversation identifier, and replace the active state with an empty conversation after the new-conversation action.
 
 **Checkpoint**: User Stories 1 and 2 are independently testable; the user can ask an initial question, continue it, and reset to a clean conversation.
+
+---
 
 ## Phase 5: User Story 3 - Recover from a Failed Request (Priority: P3)
 
@@ -119,6 +125,8 @@ description: "Actionable task list for the AI chatbot conversation feature"
 
 **Checkpoint**: All three user stories are independently functional, including the recoverable failure path.
 
+---
+
 ## Phase 6: Polish & Cross-Cutting Concerns
 
 **Purpose**: Apply constitution-wide quality gates and run the documented validation scenarios.
@@ -128,6 +136,8 @@ description: "Actionable task list for the AI chatbot conversation feature"
 - [X] T037 [P] Add frontend accessibility assertions in `frontend/tests/accessibility/chat-controls.test.tsx` for semantic labels, keyboard operation, and visible focus on the composer, new-conversation, and retry controls.
 - [X] T038 Run the repository typecheck, lint, and test scripts defined in `package.json`, `frontend/package.json`, and `backend/package.json`, then fix any failures in the affected source or test files.
 - [X] T039 Run every manual scenario in `specs/001-ai-chatbot/quickstart.md`, including the live Google AI Studio failure/retry check, and record the verification result in the implementation review.
+
+---
 
 ## Dependencies & Execution Order
 

@@ -37,8 +37,8 @@ Each scenario below maps to an acceptance scenario in `spec.md`.
    response appears once available. Confirm submitting again while pending does not
    duplicate the message.
 2. **Continue a conversation (User Story 2)**: After a completed exchange, submit a
-   related follow-up. Confirm the response reflects the earlier exchange. Then start a
-   new conversation and confirm no prior messages are present.
+   related follow-up. Confirm the response reflects the earlier exchange. Then start
+   a new conversation and confirm no prior messages are present.
 3. **Recover from a failed request (User Story 3)**: Temporarily point the backend at
    an unreachable or invalid model configuration, submit a question, and confirm an
    understandable error with a retry action is shown. Restore the configuration,

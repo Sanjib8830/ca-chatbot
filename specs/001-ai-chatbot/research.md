@@ -2,7 +2,8 @@
 
 All Technical Context values were resolved directly from `prd.md`,
 `frontend-instruction.md`, and `.specify/memory/constitution.md`; no
-`NEEDS CLARIFICATION` markers remain. This document records the resulting decisions and the alternatives considered for each.
+`NEEDS CLARIFICATION` markers remain. This document records the resulting
+decisions and the alternatives considered for each.
 
 ## Frontend framework and language
 
@@ -52,8 +53,8 @@ All Technical Context values were resolved directly from `prd.md`,
   React Testing Library for frontend component behavior.
 - **Rationale**: Constitution Principle V requires automated tests when a harness
   exists, or a documented manual verification step. Vitest is a standard,
-  TypeScript-first test runner compatible with both the React frontend and backend,
-  minimizing tooling divergence.
+  TypeScript-first test runner compatible with both the React frontend and the
+  Node.js backend, minimizing tooling divergence.
 - **Alternatives considered**: Jest — a reasonable alternative, but Vitest was chosen
   for faster TypeScript-native execution and shared configuration across
   frontend/backend without additional transpilation setup.
