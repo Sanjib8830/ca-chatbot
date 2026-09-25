@@ -1,5 +1,46 @@
 # Deployment
 
+## Render Hosting
+
+This repository is configured to host the application on Render as a public
+web service. The `render.yaml` Blueprint uses the image published to GitHub
+Container Registry, and the service receives an HTTPS URL from Render.
+
+### Create The Render Service
+
+1. In Render, add a container registry credential named
+   `github-container-registry`. Select GitHub Container Registry, use the
+   GitHub username `Sanjib8830`, and provide a token with `read:packages`
+   permission. This is required while the GHCR package is private.
+2. In the Render Dashboard, choose **New > Blueprint**, connect the
+   `Sanjib8830/ca-chatbot` repository, and apply the root `render.yaml` file.
+3. When Render prompts for `GOOGLE_API_KEY`, enter the Google AI Studio key.
+   The key is stored in Render as a runtime secret and is not committed to
+   this repository.
+4. Complete the first deploy. Render will show the public address in the
+   service dashboard, normally in the form
+   `https://ca-chatbot.onrender.com` (the exact hostname may vary).
+
+### Enable Deployments From GitHub Actions
+
+The workflow verifies the application, publishes `latest` and immutable
+SHA-tagged images to GHCR, and can then tell Render to deploy the exact SHA
+image that passed CI.
+
+Create a Render deploy hook from the service's **Settings** page and add it to
+the GitHub repository under **Settings > Secrets and variables > Actions**:
+
+- `RENDER_DEPLOY_HOOK_URL`: the secret Render deploy hook URL.
+
+Then add the repository variable `DEPLOY_RENDER_ENABLED` with the value
+`true`. Every successful push to `main` will publish the image and trigger the
+Render deployment. The workflow's manual **Deploy** input can be enabled for
+an individual run instead of setting the variable.
+
+The Render service must keep the image URL in `render.yaml` aligned with the
+published package. Render pulls the private image using the registry
+credential configured in the workspace.
+
 ## GitHub Actions
 
 The workflow in `.github/workflows/ci-and-publish.yml` runs on pull requests to
@@ -8,55 +49,12 @@ The workflow in `.github/workflows/ci-and-publish.yml` runs on pull requests to
 - Every pull request runs typecheck, lint, tests, and a production build.
 - A push to `main` publishes a container image to GitHub Container Registry:
   `ghcr.io/<your-github-owner>/ca-chatbot:latest`.
-- When VM deployment is enabled, the workflow deploys the immutable SHA-tagged
-  image to the configured Docker host after publishing it.
-- The GHCR-only path uses the built-in `GITHUB_TOKEN`. `GOOGLE_API_KEY` is not
-  needed to build the application, but it must be configured as a GitHub Actions
-  secret when using the VM deployment job.
-
-## Deploy To A VM With GitHub Actions
-
-The workflow deploys to a Linux VM over SSH. The VM must have Docker installed,
-the deploy user must be allowed to run Docker without interactive `sudo`, and
-the VM firewall must allow the application port.
-
-Prepare the VM once:
-
-```bash
-sudo mkdir -p /opt/ca-chatbot
-sudo chown "$USER":"$USER" /opt/ca-chatbot
-sudo usermod -aG docker "$USER"
-```
-
-Sign out and back in after adding the user to the `docker` group. The image is
-pulled from GHCR, so the package must be accessible to the GitHub account used
-by the deployment credentials.
-
-Add these repository **Actions secrets** under Settings > Secrets and variables >
-Actions:
-
-- `DEPLOY_HOST`: VM hostname or IP address.
-- `DEPLOY_USER`: SSH user with Docker access.
-- `DEPLOY_SSH_KEY`: private key whose public key is in the user's
-  `~/.ssh/authorized_keys`.
-- `DEPLOY_KNOWN_HOSTS`: verified output of `ssh-keyscan -H <host>`.
-- `GHCR_USERNAME`: GitHub username that owns the package.
-- `GHCR_TOKEN`: GitHub token with `read:packages` permission.
-- `GOOGLE_API_KEY`: Google AI Studio key used only at container runtime.
-
-Optional secrets are `DEPLOY_PORT` (default `22`), `DEPLOY_PATH` (default
-`/opt/ca-chatbot`), and `DEPLOY_APP_PORT` (default `80`). Add the repository
-variable `DEPLOY_VM_ENABLED=true` to deploy automatically after every successful
-push to `main`. You can also run the workflow manually from the Actions tab and
-enable its `deploy` input.
-
-The deploy job uploads the runtime environment file over the verified SSH
-connection, pulls the SHA-tagged image, replaces the `ca-chatbot` container, and
-waits for its Docker health check. The API key is never committed to the
-repository or baked into the image.
-
-If GitHub creates the package as private, set its visibility in the repository's
-Packages settings before using it from a separate hosting service.
+- A successful `main` push can trigger Render through
+  `RENDER_DEPLOY_HOOK_URL` after publishing the immutable SHA-tagged image.
+- `GOOGLE_API_KEY` is not needed by GitHub Actions. Configure it in the Render
+  service's environment settings so it is available only at runtime.
+- The image is built for `linux/amd64`, which is required by Render image-backed
+  services.
 
 ## Run The Published Image
 
@@ -75,10 +73,9 @@ from one origin. It intentionally does not contain `backend/.env` or the API key
 
 ## Hosting Provider
 
-GitHub Actions publishes the deployable image, but an actual public deployment
-also needs a hosting target such as Azure Container Apps, Google Cloud Run,
-Render, Railway, Fly.io, or a server running Docker. Configure that target with a
-runtime environment variable named `GOOGLE_API_KEY`, not a committed `.env` file.
+Render provides the public hosting URL and HTTPS termination. The application
+container listens on port `3001`, and Render routes public traffic to it. A
+custom domain can be added later from the Render service settings.
 
 ## Local Development
 
