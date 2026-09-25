@@ -5,6 +5,13 @@ on:
     branches: [main]
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: Deploy the published image to the configured VM
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -41,7 +48,9 @@ jobs:
   publish:
     name: Publish GitHub Container Registry image
     needs: verify
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -73,3 +82,109 @@ jobs:
           push: true
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
+
+  deploy:
+    name: Deploy container to VM
+    needs: publish
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+      vars.DEPLOY_VM_ENABLED == 'true') ||
+      (github.event_name == 'workflow_dispatch' && inputs.deploy)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 10
+    steps:
+      - name: Start SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+      - name: Configure SSH host key
+        env:
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -eu
+          if [ -z "$DEPLOY_KNOWN_HOSTS" ]; then
+            echo "DEPLOY_KNOWN_HOSTS is required."
+            exit 1
+          fi
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 644 "$HOME/.ssh/known_hosts"
+
+      - name: Deploy image over SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || '/opt/ca-chatbot' }}
+          DEPLOY_APP_PORT: ${{ secrets.DEPLOY_APP_PORT || '80' }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          IMAGE: ghcr.io/${{ github.repository }}:sha-${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          for required_variable in DEPLOY_HOST DEPLOY_USER GOOGLE_API_KEY GHCR_USERNAME GHCR_TOKEN; do
+            if [ -z "${!required_variable}" ]; then
+              echo "$required_variable is required for VM deployment."
+              exit 1
+            fi
+          done
+
+          temporary_directory="$(mktemp -d)"
+          trap 'rm -rf "$temporary_directory"' EXIT
+          printf 'GOOGLE_API_KEY=%s\n' "$GOOGLE_API_KEY" > "$temporary_directory/app.env"
+          printf '%s\n%s\n' "$GHCR_USERNAME" "$GHCR_TOKEN" > "$temporary_directory/ghcr-credentials"
+          chmod 600 "$temporary_directory/app.env" "$temporary_directory/ghcr-credentials"
+
+          remote_path="$(printf '%q' "$DEPLOY_PATH")"
+          ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+            "mkdir -p -- $remote_path && chmod 700 -- $remote_path"
+          scp -P "$DEPLOY_PORT" "$temporary_directory/app.env" \
+            "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/.env"
+          scp -P "$DEPLOY_PORT" "$temporary_directory/ghcr-credentials" \
+            "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/.ghcr-credentials"
+
+          ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+            "bash -s -- $(printf '%q' "$DEPLOY_PATH") $(printf '%q' "$IMAGE") $(printf '%q' "$DEPLOY_APP_PORT")" <<'REMOTE'
+          set -euo pipefail
+          deploy_path="$1"
+          image="$2"
+          app_port="$3"
+
+          chmod 600 "$deploy_path/.env" "$deploy_path/.ghcr-credentials"
+          ghcr_username="$(sed -n '1p' "$deploy_path/.ghcr-credentials")"
+          ghcr_token="$(sed -n '2p' "$deploy_path/.ghcr-credentials")"
+          printf '%s' "$ghcr_token" | docker login ghcr.io --username "$ghcr_username" --password-stdin
+          docker pull "$image"
+          docker logout ghcr.io >/dev/null 2>&1 || true
+          rm -f "$deploy_path/.ghcr-credentials"
+
+          docker rm -f ca-chatbot >/dev/null 2>&1 || true
+          docker run --detach \
+            --name ca-chatbot \
+            --restart unless-stopped \
+            --env-file "$deploy_path/.env" \
+            --publish "$app_port:3001" \
+            "$image"
+
+          for attempt in $(seq 1 30); do
+            health_status="$(docker inspect --format '{{.State.Health.Status}}' ca-chatbot 2>/dev/null || true)"
+            if [ "$health_status" = "healthy" ]; then
+              echo "ca-chatbot is healthy."
+              exit 0
+            fi
+            if [ "$health_status" = "unhealthy" ]; then
+              docker logs --tail 100 ca-chatbot
+              exit 1
+            fi
+            sleep 2
+          done
+
+          docker logs --tail 100 ca-chatbot
+          echo "ca-chatbot did not become healthy in time."
+          exit 1
+          REMOTE
